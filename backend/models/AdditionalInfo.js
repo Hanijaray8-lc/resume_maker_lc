@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const AdditionalInfoSchema = new mongoose.Schema(
   {
     userId: { type: String,  },  // link to user
-    details: { type: String, maxlength: 120 }, // rich text details (limit 90 chars)
+    details: { type: String }, // rich text details (no maxlength)
   },
   { timestamps: true }
 );
