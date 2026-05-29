@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   lastName: String,
   currentPosition: String,
   city: String,
+  address: String,
   country: { type: String, default: "India" },
   pinCode: String,
   phone: String,

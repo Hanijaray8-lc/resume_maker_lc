@@ -128,4 +128,34 @@ router.delete("/delete-account", authMiddleware, async (req, res) => {
   }
 });
 
+// =====================================
+// ✅ Reset Password (by email)
+// =====================================
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { email, newPassword, confirmPassword } = req.body;
+
+    if (!email || !email.includes("@"))
+      return res.status(400).json({ message: "Please provide a valid email" });
+
+    if (!newPassword || newPassword.length < 6)
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+
+    if (newPassword !== confirmPassword)
+      return res.status(400).json({ message: "Passwords do not match" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User with that email not found" });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;
