@@ -50,6 +50,9 @@ router.post("/save", upload.single("photo"), async (req, res) => {
     // If photo uploaded → save filename
     if (req.file) {
       contactData.photo = `/uploads/${req.file.filename}`;
+    } else if (req.body.removePhoto === "true") {
+      // User explicitly removed their photo → clear it in DB
+      contactData.photo = "";
     }
 
     const updatedUser = await User.findByIdAndUpdate(
