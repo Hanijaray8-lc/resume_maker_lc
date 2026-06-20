@@ -1,4 +1,3 @@
-// server.js (updated)
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -32,7 +31,7 @@ const spellcorrectionsRoutes = require("./routes/spellcorrections");
 
 const resumeRoutes = require("./routes/resumes");
 const personalDetailsRoute = require("./routes/PersonalDetailsRoute");
-// const EducationRoutes = require("./routes/EducationRoutes");
+const aiResumeRoutes = require("./resumeRoutes"); // ✅ பேர் மாத்தினோம்
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -42,9 +41,8 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/spellcheck", spellcheckRoutes);
 app.use("/api/resumes", resumeRoutes);
 app.use("/api/spellcorrections", spellcorrectionsRoutes);
-
-app.use("/api/personal-details", personalDetailsRoute); 
-// app.use("/api/education", EducationRoutes);
+app.use("/api", aiResumeRoutes); // ✅ பேர் மாத்தினோம்
+app.use("/api/personal-details", personalDetailsRoute);
 
 // Static file serving (uploads)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
