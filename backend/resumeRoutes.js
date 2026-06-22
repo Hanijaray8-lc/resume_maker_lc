@@ -17,27 +17,35 @@ const Groq = require("groq-sdk");
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ==========================
-// 🔐 AUTH MIDDLEWARE
+// 🔐 OPTIONAL AUTH MIDDLEWARE
 // ==========================
-const authMiddleware = (req, res, next) => {
+// Login இருந்தா userId attach pannும், login இல்லாம இருந்தாலும்
+// request ஐ block பண்ணாம next() கூப்பிடும். req.userId null ஆ இருக்கும்.
+const optionalAuthMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.startsWith("Bearer ")
     ? req.headers.authorization.split(" ")[1]
     : null;
-  if (!token) return res.status(401).json({ success: false, error: "Unauthorized" });
+
+  if (!token) {
+    req.userId = null;
+    return next();
+  }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.userId = decoded.id;
-    next();
   } catch {
-    res.status(401).json({ success: false, error: "Invalid token" });
+    // Invalid/expired token irundhalum block pannamal, login illama treat pannrom
+    req.userId = null;
   }
+  next();
 };
 
 // ==========================
 // 📄 RESUME ANALYSIS SCHEMA
 // ==========================
 const resumeAnalysisSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
   fileName: String,
   extractedText: String,
   atsScore: Number,
@@ -168,7 +176,9 @@ const analyzeResumeFallback = (text) => {
 // ==========================
 
 // 1️⃣ POST /api/resume/analyze
-router.post("/resume/analyze", authMiddleware, (req, res) => {
+// Login optional: token irundha analysis history-la save aagum (user attach aagும்).
+// Token illama irundhalum login error varama analyze nadakkum, save mattum skip aagum.
+router.post("/resume/analyze", optionalAuthMiddleware, (req, res) => {
   upload.single("resume")(req, res, async (uploadErr) => {
     try {
       if (uploadErr) {
@@ -252,24 +262,35 @@ Return this exact JSON structure:
         extractedText: cleaned.substring(0, 5000)
       };
 
-      const saved = new ResumeAnalysis({
-        user: req.userId,
-        fileName: req.file.originalname,
-        extractedText: analysisWithText.extractedText,
-        atsScore: analysis.atsScore,
-        missingSkills: analysis.missingSkills || [],
-        skillsFound: analysis.skillsFound || [],
-        education: analysis.education || [],
-        experience: analysis.experience || [],
-        grammarCorrections: analysis.grammarCorrections || [],
-        suggestions: analysis.suggestions || [],
-        strengths: analysis.strengths || [],
-        weaknesses: analysis.weaknesses || [],
-        matchingRoles: analysis.matchingRoles || []
-      });
-      await saved.save();
+      // Login panni irundha mattum DB-la save pannrom (history feature ku).
+      // Login illama irundha, save skip pannitu result-ah straight ah return pannrom.
+      let savedId = null;
+      if (req.userId) {
+        const saved = new ResumeAnalysis({
+          user: req.userId,
+          fileName: req.file.originalname,
+          extractedText: analysisWithText.extractedText,
+          atsScore: analysis.atsScore,
+          missingSkills: analysis.missingSkills || [],
+          skillsFound: analysis.skillsFound || [],
+          education: analysis.education || [],
+          experience: analysis.experience || [],
+          grammarCorrections: analysis.grammarCorrections || [],
+          suggestions: analysis.suggestions || [],
+          strengths: analysis.strengths || [],
+          weaknesses: analysis.weaknesses || [],
+          matchingRoles: analysis.matchingRoles || []
+        });
+        await saved.save();
+        savedId = saved._id;
+      }
 
-      res.json({ success: true, analysis: analysisWithText, analysisId: saved._id });
+      res.json({
+        success: true,
+        analysis: analysisWithText,
+        analysisId: savedId,
+        savedToHistory: Boolean(savedId)
+      });
     } catch (err) {
       console.error("Resume analyze error:", err);
       res.status(500).json({ success: false, error: err.message || "Resume analysis failed" });
@@ -278,7 +299,22 @@ Return this exact JSON structure:
 });
 
 // 2️⃣ GET /api/resume/history
-router.get("/resume/history", authMiddleware, async (req, res) => {
+// Idhu mattum login required (history user specific data, so token kandippa venum)
+const requireAuthMiddleware = (req, res, next) => {
+  const token = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.split(" ")[1]
+    : null;
+  if (!token) return res.status(401).json({ success: false, error: "Unauthorized" });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.userId = decoded.id;
+    next();
+  } catch {
+    res.status(401).json({ success: false, error: "Invalid token" });
+  }
+};
+
+router.get("/resume/history", requireAuthMiddleware, async (req, res) => {
   try {
     const history = await ResumeAnalysis.find({ user: req.userId }).sort("-createdAt");
     res.json(history);
@@ -288,7 +324,8 @@ router.get("/resume/history", authMiddleware, async (req, res) => {
 });
 
 // 3️⃣ POST /api/resume/improve
-router.post("/resume/improve", authMiddleware, async (req, res) => {
+// Idhu login optional ah vechrukom - analyze mathiri yaru venalum use pannalam
+router.post("/resume/improve", optionalAuthMiddleware, async (req, res) => {
   try {
     const { originalText, suggestions } = req.body;
     if (!originalText) return res.status(400).json({ error: "Missing text" });
